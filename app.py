@@ -23,7 +23,12 @@ except KeyError:
 client = genai.Client(api_key=API_KEY)
 
 # --- Função de Caching (Otimização de Performance) ---
-@st.cache_data(show_spinner="📸 Analisando a imagem e criando a receita (pode levar alguns segundos)...")
+# CORREÇÃO: Adicionamos hash_funcs={Image.Image: lambda _: None} para IGNORAR o objeto PIL.Image
+# no cálculo do cache, resolvendo o UnhashableParamError.
+@st.cache_data(
+    show_spinner="📸 Analisando a imagem e criando a receita (pode levar alguns segundos)...",
+    hash_funcs={Image.Image: lambda _: None}
+)
 def gerar_receita(ingredientes_input, uploaded_image=None):
     """
     Gera uma receita usando o modelo Gemini 2.5 Flash, aceitando imagem ou texto.
@@ -70,7 +75,8 @@ def gerar_receita(ingredientes_input, uploaded_image=None):
         )
         return response.text
     except APIError as e:
-        st.error(f"Erro na API Gemini: Falha ao gerar conteúdo. Verifique se o modelo 'gemini-2.5-flash' está disponível e a chave está correta. Detalhes: {e}")
+        st.error(f"Erro na API Gemini: Falha ao gerar conteúdo. Detalhes: {e}")
+        st.info("Se o erro for '503 UNAVAILABLE', o servidor está sobrecarregado. Tente novamente em 1 minuto.")
         return "Desculpe, não foi possível gerar a receita devido a um erro na comunicação com a API."
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado: {e}")
@@ -153,8 +159,8 @@ st.markdown(
     }
     </style>
     <div class="footer">
-        Desenvolvido  por Ricardo Oliveira usando Google Gemini API e Streamlit 
-                </div>
+        Desenvolvido por  Ricardo Oliveira usando Google Gemini API e Streamlit
+    </div>
     """, 
     unsafe_allow_html=True
 )
