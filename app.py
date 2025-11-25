@@ -2,12 +2,11 @@ import streamlit as st
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
-from PIL import Image
 
 # --- Configuração Inicial ---
 st.set_page_config(
-    page_title="Chef Assistente Multimodal",
-    page_icon="📸",
+    page_title="Chef Assistente",
+    page_icon="🍳",
     layout="centered"
 )
 
@@ -22,53 +21,36 @@ except KeyError:
 # Inicialização do Cliente Gemini
 client = genai.Client(api_key=API_KEY)
 
-# --- Função de Caching (Otimização de Performance) ---
-# CORREÇÃO: Adicionamos hash_funcs={Image.Image: lambda _: None} para IGNORAR o objeto PIL.Image
-# no cálculo do cache, resolvendo o UnhashableParamError.
-@st.cache_data(
-    show_spinner="📸 Analisando a imagem e criando a receita (pode levar alguns segundos)...",
-    hash_funcs={Image.Image: lambda _: None}
-)
-def gerar_receita(ingredientes_input, uploaded_image=None):
+# --- Função de Geração de Receita (com Caching) ---
+@st.cache_data(show_spinner="🍳 Criando sua receita deliciosa...")
+def gerar_receita(ingredientes_input):
     """
-    Gera uma receita usando o modelo Gemini 2.5 Flash, aceitando imagem ou texto.
+    Gera uma receita usando o modelo Gemini 2.5 Flash, baseada em texto.
     """
     
     # 1. Definição da Persona/Instrução do Sistema
     system_prompt = """
     Você é um Chef Assistente profissional, criativo e amigável.
-    Sua tarefa é criar uma receita completa e deliciosa baseada APENAS nos ingredientes que você identificar no INPUT.
+    Sua tarefa é criar uma receita completa e deliciosa baseada APENAS nos ingredientes fornecidos.
 
     **Regras:**
-    1. Se uma IMAGEM for fornecida, IDENTIFIQUE todos os ingredientes comestíveis e use-os. Ignore caixas, embalagens ou texto não comestível.
-    2. Se apenas TEXTO for fornecido, use o texto.
-    3. A receita deve ser clara, passo a passo, e fácil de seguir.
-    4. A saída DEVE ser formatada usando Markdown com títulos e subtítulos (Ex: '# Título', '## Ingredientes', '## Modo de Preparo').
-    5. Inclua um tempo de preparo estimado no início da receita.
-    6. Crie uma sugestão de nome criativo para o prato.
+    1. A receita deve ser clara, passo a passo, e fácil de seguir.
+    2. A saída DEVE ser formatada usando Markdown com títulos e subtítulos (Ex: '# Título', '## Ingredientes', '## Modo de Preparo').
+    3. Inclua um tempo de preparo estimado no início da receita.
+    4. Crie uma sugestão de nome criativo para o prato.
     """
     
-    # 2. Definição do Conteúdo (Input Multimodal)
-    contents = []
-    
-    if uploaded_image:
-        contents.append(uploaded_image)
-        user_prompt_text = (
-            "Analise esta imagem. Crie uma receita completa usando APENAS os ingredientes comestíveis identificados."
-        )
-    else:
-        user_prompt_text = (
-            f"Crie uma receita completa usando os seguintes ingredientes disponíveis:\n\n"
-            f"Ingredientes: {ingredientes_input}\n\n"
-        )
-    
-    contents.append(user_prompt_text)
+    # 2. Definição do Conteúdo (Input de Texto)
+    user_prompt_text = (
+        f"Crie uma receita completa usando os seguintes ingredientes disponíveis:\n\n"
+        f"Ingredientes: {ingredientes_input}\n\n"
+    )
     
     # 3. Execução da Chamada à API com Tratamento de Erro
     try:
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=contents,
+            contents=[user_prompt_text],
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
             ),
@@ -85,57 +67,28 @@ def gerar_receita(ingredientes_input, uploaded_image=None):
 
 # --- Interface do Usuário (UI) ---
 
-st.title("📸 Chef Assistente Multimodal")
+st.title("🍳 Chef Assistente")
 st.markdown("---")
 
-st.subheader("Como você quer gerar a receita?")
-st.markdown("Escolha a opção mais fácil para você:")
+st.subheader("O que você tem na sua geladeira?")
+st.markdown("Liste os ingredientes que você gostaria de usar para criarmos uma receita deliciosa.")
 
-# Opção 1: Upload de Imagem/Foto (Prioritário)
-uploaded_file = st.file_uploader(
-    "1. Tire ou Envie uma Foto da sua Geladeira/Despensa:",
-    type=["jpg", "jpeg", "png"],
-    accept_multiple_files=False,
-    help="DICA: No celular, este botão permite abrir a câmera para tirar uma foto na hora!"
-)
-
-image = None
-if uploaded_file is not None:
-    try:
-        image = Image.open(uploaded_file)
-        st.image(image, caption='Sua foto de ingredientes.', use_column_width=True)
-    except Exception as e:
-        st.error(f"Não foi possível processar a imagem. Erro: {e}")
-
-    # Botão de Ação para Imagem
-    if st.button("✨ Gerar Receita com Base na Foto!", type="primary", use_container_width=True):
-        if image:
-            receita = gerar_receita(ingredientes_input="", uploaded_image=image)
-            st.markdown("---")
-            st.success("Receita Gerada por Análise de Imagem!")
-            st.markdown(receita)
-        else:
-             st.warning("Imagem inválida ou não carregada.")
-
-
-# Opção 2: Entrada de Texto (Fallback)
-st.markdown("---")
-st.markdown("**OU**")
 
 ingredientes_texto = st.text_input(
-    "2. Digite os Ingredientes (Se não quiser enviar foto):",
+    "1. Digite seus Ingredientes:",
     placeholder="Ex: tomate, ovos, queijo, pão, cebola, azeite"
 )
 
 # Botão de Ação para Texto
-if st.button("✨ Gerar Receita por Texto!", type="secondary", use_container_width=True):
+if st.button("✨ Gerar Receita!", type="primary", use_container_width=True):
     if ingredientes_texto:
-        receita = gerar_receita(ingredientes_input=ingredientes_texto, uploaded_image=None)
+        # Chama a função de geração de receita
+        receita = gerar_receita(ingredientes_input=ingredientes_texto)
         st.markdown("---")
-        st.success("Receita Gerada por Texto!")
+        st.success("Receita Gerada!")
         st.markdown(receita)
     else:
-        st.warning("Por favor, insira pelo menos um ingrediente ou envie uma foto para começar.")
+        st.warning("Por favor, insira pelo menos um ingrediente para começar.")
 
 # Gerenciamento de Cache
 st.markdown("---")
@@ -159,7 +112,7 @@ st.markdown(
     }
     </style>
     <div class="footer">
-        Desenvolvido por  Ricardo Oliveira usando Google Gemini API e Streamlit
+        Desenvolvido por  Ricardo Oliveira  Aplicação com API de IA em publicação no Streamlit.
     </div>
     """, 
     unsafe_allow_html=True
